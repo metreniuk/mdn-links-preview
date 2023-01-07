@@ -3,22 +3,28 @@
  *
  *
  * TODO:
- * - Fetch examples
  * - Support tooltip desired position (and make it CSS only)
- * - Add cache
- * - Add transition: on hover and on hover leave hide with a delay of 500ms
- * - Handle scroll bar width when aligning right
+ * - Fix multiple tooltips race condition
  * - Handle mobile
- * - Support not only <code> tag
  * - Write tests for: location detection
+ *
+ *
+ *
+ *
+ * - Handle scroll bar width when aligning right
+ * - Support not only <code> tag
+ * - Fetch examples
  *
  *
  *
  * DONE:
  * - Render tooltip on link hover
+ * - Add focus
  * - Fetch title, description
  * - Hide on scroll
  * - Auto-position the tooltip
+ * - Add transition: on hover and on hover leave hide with a delay of 500ms
+ * - Add cache
  *
  *
  * - Ignore current page (or just anchors)
@@ -30,9 +36,6 @@ console.log("@@ LOADED", chrome)
 const TOOLTIP_WIDTH = 400
 
 function listenLinks() {
-  let tooltip = null
-  let tooltipTimeout = null
-
   document.addEventListener("mouseover", (event) => {
     if (event.target?.tagName === "CODE" && event.target?.parentNode?.href) {
       showPreview(event.target.parentNode)
@@ -46,33 +49,82 @@ function listenLinks() {
     } else if (event.target?.href) {
       href = event.target.href
     }
-    removeTooltip()
+    removeTooltip(href)
   })
+
+  document.addEventListener(
+    "focus",
+    (event) => {
+      if (
+        event.target?.href &&
+        event.target?.childNodes.item(0)?.tagName === "CODE"
+      ) {
+        showPreview(event.target)
+      }
+    },
+    { capture: true }
+  )
+
+  document.addEventListener(
+    "blur",
+    (event) => {
+      if (
+        event.target?.href &&
+        event.target?.childNodes.item(0)?.tagName === "CODE"
+      ) {
+        removeTooltip(event.target.href)
+      }
+    },
+    { capture: true }
+  )
 
   window.addEventListener(
     "scroll",
     () => {
-      removeTooltip()
+      //   tooltipsMap.forEach((val) => val.remove())
+      //   tooltipsMap.clear()
+      removeAllTooltips()
     },
     { capture: true, passive: true }
   )
 
-  function removeTooltip() {
-    if (tooltip) {
-      tooltip.remove()
-      tooltip = null
-    }
+  window.addEventListener(
+    "keydown",
+    (event) => {
+      console.log("e", event.code)
+      if (event.code === "Escape") {
+        removeAllTooltips()
+        event.stopPropagation()
+      }
+    },
+    { capture: true, passive: true }
+  )
 
-    // if (tooltipTimeout) {
-    //   return
-    // }
-    // if (tooltip) {
-    //   tooltipTimeout = setTimeout(() => {
-    //     tooltip.remove()
-    //     tooltip = null
-    //     tooltipTimeout = null
-    //   }, 450)
-    // }
+  function removeTooltip(href, fast = false) {
+    if (tooltipsMap.has(href)) {
+      const tooltip = getTooltip(href)
+
+      function hide() {
+        requestAnimationFrame(() => {
+          tooltip.style.opacity = "0"
+          setTimeout(() => {
+            tooltip.remove()
+            tooltipsMap.delete(href)
+          }, 400)
+        })
+      }
+      if (fast) {
+        hide()
+      } else {
+        setTimeout(() => {
+          hide()
+        }, 250)
+      }
+    }
+  }
+
+  function removeAllTooltips() {
+    tooltipsMap.forEach((_, href) => removeTooltip(href, true))
   }
 
   async function showPreview(link) {
@@ -80,19 +132,19 @@ function listenLinks() {
     if (!href.startsWith("https://developer.mozilla.org/")) {
       return
     }
-    removeTooltip()
+    // removeTooltip(href)
 
     if (!cache.has(href)) {
       await fetchLinkData(href)
     }
 
-    removeTooltip()
+    // removeTooltip(href)
 
     const linkData = cache.get(href)
 
     const body = document.querySelector("body")
 
-    tooltip = document.createElement("div")
+    let tooltip = getTooltip(href)
     tooltip.setAttribute("role", "tooltip")
     tooltip.style.cssText = `
             position: fixed;
@@ -169,6 +221,14 @@ function getTooltipLocation(el, tooltip) {
     top,
     left,
   }
+}
+
+const tooltipsMap = new Map()
+function getTooltip(href) {
+  if (!tooltipsMap.has(href)) {
+    tooltipsMap.set(href, document.createElement("div"))
+  }
+  return tooltipsMap.get(href)
 }
 
 /**
