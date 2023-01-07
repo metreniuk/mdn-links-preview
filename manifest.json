@@ -1,0 +1,16 @@
+{
+  "name": "MDN links preview",
+  "version": "1.0",
+  "manifest_version": 3,
+  "background": {
+    "service_worker": "background.js"
+  },
+  "devtools_page": "devtools/devtools-page.html",
+  "action": {},
+  "content_scripts": [
+    {
+      "js": ["scripts/content.js"],
+      "matches": ["https://developer.mozilla.org/*"]
+    }
+  ]
+}
